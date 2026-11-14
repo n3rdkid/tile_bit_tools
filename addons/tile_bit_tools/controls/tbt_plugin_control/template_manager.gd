@@ -65,7 +65,10 @@ func get_bit_data_draw() -> SubViewport:
 
 
 func get_user_templates_path() -> String:
-	var path : String = ProjectSettings.get_setting(TBTPlugin.G.Settings.user_templates_path.path)
+	var path : String = ProjectSettings.get_setting(TBTPlugin.G.Settings.user_templates_path.path, "")
+	# an empty path would otherwise resolve to the current working directory
+	if path.strip_edges().is_empty():
+		return ""
 	var dir := DirAccess.open(path)
 	if dir:
 		return dir.get_current_dir()

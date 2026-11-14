@@ -22,17 +22,27 @@ func _enter_tree() -> void:
 	var result : G.Errors = plugin.setup(get_editor_interface())
 	if result != OK:
 		output.user("Unable to initialize, disabling plugin")
-		get_editor_interface().set_plugin_enabled(PLUGIN_NAME, false)
+		# Disabling a plugin from inside its own _enter_tree() crashes the
+		# editor in recent Godot versions, so wait until we are out of it.
+		_disable_self.call_deferred()
 		return
 	output.info("Initialization complete")
 	output.user(texts.WELCOME_MESSAGE)
 	output.user(texts.WELCOME_MESSAGE2)
 
 
+func _disable_self() -> void:
+	EditorInterface.set_plugin_enabled(PLUGIN_NAME, false)
+
+
+# Called by the editor whenever it resets its state (after loading the
+# layout, when closing scenes, ...). Only drop the per-selection inspector
+# here: freeing the shared nodes left the plugin in a broken state until
+# the next selection.
 func _clear() -> void:
 	output.debug("plugin.gd : _clear()")
 	if plugin:
-		plugin.clean_up()
+		plugin.clear_tiles_inspector()
 
 
 func _exit_tree() -> void:
@@ -40,7 +50,8 @@ func _exit_tree() -> void:
 	output.info("Cleaning up...")
 	if plugin:
 		plugin.clean_up()
-	remove_inspector_plugin(plugin)
+		remove_inspector_plugin(plugin)
+		plugin = null
 
 
 

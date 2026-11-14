@@ -59,20 +59,17 @@ func setup(p_interface : EditorInterface) -> G.Errors:
 		return G.Errors.FAILED
 
 
-	tile_atlas_view = _get_first_node_by_class(tile_set_editor, "TileAtlasView")
+	tile_atlas_view = _get_first_node_by_class(atlas_source_editor, "TileAtlasView")
+	if !tile_atlas_view:
+		tile_atlas_view = _get_first_node_by_class(tile_set_editor, "TileAtlasView")
 	#output.debug("tile_atlas_view=%s" % tile_atlas_view)
 	if !tile_atlas_view:
 		return G.Errors.FAILED
 
-	atlas_source_proxy = _get_first_connected_object_by_class(atlas_source_editor, "TileSetAtlasSourceProxyObject")
-	#output.debug("atlas_source_proxy=%s" % atlas_source_proxy)
-	if !atlas_source_proxy:
-		return G.Errors.FAILED
-
-	atlas_tile_proxy = _get_first_connected_object_by_class(atlas_source_editor, "AtlasTileProxyObject")
-	#output.debug("atlas_tile_proxy=%s" % atlas_tile_proxy)
-	if !atlas_tile_proxy:
-		return G.Errors.FAILED
+	# Godot 4.7: the proxy objects can no longer be found through the
+	# source editor's incoming connections at startup. They are resolved
+	# lazily instead (see _update_proxy_objects()).
+	_update_proxy_objects()
 
 #	_print_signals_and_connections(tile_atlas_view)
 
@@ -137,6 +134,7 @@ func _can_handle(object: Object) -> bool:
 
 	if object.is_class("AtlasTileProxyObject"):
 		output.debug("_can_handle() => AtlasTileProxyObject")
+		atlas_tile_proxy = object
 		return true
 
 	return false
@@ -146,6 +144,7 @@ func _parse_end(object: Object) -> void:
 	if !object.is_class("AtlasTileProxyObject"):
 		output.warning("_parse_end(): object is not AtlasTileProxyObject, instead it is %s" % object)
 		return
+	atlas_tile_proxy = object
 
 	var result := await _add_inspector()
 	if result != OK:
@@ -244,6 +243,11 @@ func clean_up() -> void:
 
 
 
+# Called from parent plugin when the editor clears its state
+func clear_tiles_inspector() -> void:
+	var _err := _clear_tiles_inspector()
+
+
 # Called when inspector data changed or focus moved away
 func _clear_tiles_inspector() -> G.Errors:
 	output.debug("_clear_tiles_inspector()")
@@ -272,16 +276,57 @@ func _remove_shared_editor_nodes() -> void:
 # 	Helper functions
 # --------------------------------------
 
+# Finds the proxy objects edited by the two inspectors that live inside
+# the atlas source editor. Either may be missing until a TileSet is open
+# and tiles are selected, so this is called again whenever they are needed.
+func _update_proxy_objects() -> void:
+	if !is_instance_valid(atlas_source_editor):
+		return
+	for inspector in atlas_source_editor.find_children("*", "EditorInspector", true, false):
+		var edited : Object = inspector.get_edited_object()
+		if !is_instance_valid(edited):
+			continue
+		if edited.is_class("TileSetAtlasSourceProxyObject"):
+			atlas_source_proxy = edited
+		elif edited.is_class("AtlasTileProxyObject"):
+			atlas_tile_proxy = edited
+
+
 func _get_current_tile_set() -> TileSet:
 	return _get_first_connected_object_by_class(tile_set_editor, "TileSet")
 
 
 func _get_current_source() -> TileSetAtlasSource:
-	return _get_first_connected_object_by_class(atlas_source_proxy, "TileSetAtlasSource")
+	_update_proxy_objects()
+
+	if is_instance_valid(atlas_source_proxy):
+		var source := _get_first_connected_object_by_class(atlas_source_proxy, "TileSetAtlasSource")
+		if source:
+			return source
+
+	# fallback: find the atlas source that owns the selected TileData
+	var tile_set := _get_current_tile_set()
+	if !tile_set or !is_instance_valid(atlas_tile_proxy):
+		return null
+	var tile_data_objects := _get_connected_objects_by_class(atlas_tile_proxy, "TileData")
+	if tile_data_objects.is_empty():
+		return null
+	for i in range(tile_set.get_source_count()):
+		var source := tile_set.get_source(tile_set.get_source_id(i)) as TileSetAtlasSource
+		if !source:
+			continue
+		if _find_coordinates_in_source(tile_data_objects[0], source) != INVALID_COORDINATES:
+			return source
+	return null
 
 
 func _get_current_tiles(source : TileSetAtlasSource) -> Dictionary:
 	var tiles := {}
+
+	if !is_instance_valid(atlas_tile_proxy):
+		_update_proxy_objects()
+	if !is_instance_valid(atlas_tile_proxy):
+		return {}
 
 	var tile_data_objects := _get_connected_objects_by_class(atlas_tile_proxy, "TileData")
 	for tile_data in tile_data_objects:
@@ -318,9 +363,13 @@ func _get_first_connected_object_by_class(object : Object, p_class_name : String
 
 func _get_connected_objects_by_class(object : Object, p_class_name : String) -> Array:
 	var objects := []
+	if !is_instance_valid(object):
+		return objects
 	for connection in object.get_incoming_connections():
 		var connected_object = connection["signal"].get_object()
-		if connected_object.is_class(p_class_name):
+		if !is_instance_valid(connected_object):
+			continue
+		if connected_object.is_class(p_class_name) and !objects.has(connected_object):
 			objects.append(connected_object)
 	return objects
 

@@ -56,6 +56,9 @@ var override_methods := {
 	Overrides.BUTTON_FOCUS: "get_theme_stylebox",
 }
 
+# Each value is either [item_name, theme_type] or a list of such pairs.
+# With a list, the first pair that exists in the editor theme is used;
+# editor theme item names have moved around between Godot versions.
 var overrides_dict := {
 	# ----------------------------------------------------
 	#			FONTS
@@ -73,12 +76,12 @@ var overrides_dict := {
 	"TBTPropertyLabel": {
 		Overrides.FONT: ["main", "EditorFonts"],
 		Overrides.FONT_SIZE: ["main_size", "EditorFonts"],
-		Overrides.FONT_COLOR: ["property_color", "Editor"],
+		Overrides.FONT_COLOR: [["property_color", "EditorProperty"], ["property_color", "Editor"]],
 	},
 	"TBTSubPropertyLabel": {
 		Overrides.FONT: ["main", "EditorFonts"],
 		Overrides.FONT_SIZE: ["main_size", "EditorFonts"],
-		Overrides.FONT_COLOR: ["sub_inspector_property_color", "Editor"],
+		Overrides.FONT_COLOR: [["sub_inspector_property_color", "EditorStyles"], ["sub_inspector_property_color", "Editor"]],
 	},
 
 
@@ -90,10 +93,10 @@ var overrides_dict := {
 		Overrides.PANEL: ["bg", "EditorInspectorCategory"],
 	},
 	"TBTSubinspectorPanel": {
-		Overrides.PANEL: ["sub_inspector_property_bg0", "Editor"],
+		Overrides.PANEL: [["sub_inspector_property_bg0", "EditorStyles"], ["sub_inspector_property_bg0", "Editor"]],
 	},
 	"TBTSubinspectorOverlayPanel": {
-		Overrides.PANEL: ["sub_inspector_bg0", "Editor"],
+		Overrides.PANEL: [["sub_inspector_bg0", "EditorStyles"], ["sub_inspector_bg0", "Editor"]],
 	},
 	"TBTSubinspectorPropertiesPanel": {
 		Overrides.PANEL: ["panel", "Tree"],
@@ -108,15 +111,15 @@ var overrides_dict := {
 		Overrides.PANEL: ["panel", "TabContainer"],
 	},
 	"TBTPreviewPanelForeground": {
-		Overrides.PANEL: ["bg", "GraphEdit"],
+		Overrides.PANEL: [["panel", "GraphEdit"], ["bg", "GraphEdit"]],
 	},
 	"TBTPreviewHBoxPanel": {
-		Overrides.PANEL: ["MenuHover", "EditorStyles"],
+		Overrides.PANEL: [["MenuHover", "EditorStyles"], ["hover", "MenuButton"], ["hover", "Button"]],
 	},
 	"TBTPlaceholderLabel": {
 		Overrides.NORMAL_FONT: ["font", "Label"],
 		Overrides.NORMAL_FONT_SIZE: ["main_size", "EditorFonts"],
-		Overrides.DEFAULT_COLOR: ["property_color", "Editor"],
+		Overrides.DEFAULT_COLOR: [["property_color", "EditorProperty"], ["property_color", "Editor"]],
 	},
 
 
@@ -138,8 +141,8 @@ var overrides_dict := {
 	# BUTTONS
 	"TBTTextButton": {
 		Overrides.FONT_COLOR: ["font_color", "Editor"],
-		Overrides.FONT: ["main_button_font", "EditorFonts"],
-		Overrides.FONT_SIZE: ["main_button_font_size", "EditorFonts"],
+		Overrides.FONT: ["main", "EditorFonts"],
+		Overrides.FONT_SIZE: ["main_size", "EditorFonts"],
 #		Overrides.FONT: ["bold", "EditorFonts"],
 #		Overrides.FONT_SIZE: ["bold_size", "EditorFonts"],
 
@@ -213,7 +216,9 @@ func _update_groups() -> void:
 			var method : String = override_methods[override]
 			var args : Array = overrides_dict[group][override]
 			var property : String = override_properties[override]
-			var value = tbt.base_control.callv(method, args)
+			var value = _get_theme_value(method, args)
+			if value == null:
+				continue
 			get_tree().set_group(group, property, value)
 
 
@@ -224,8 +229,22 @@ func _update_node(node : Node) -> void:
 				var method : String = override_methods[override]
 				var args : Array = overrides_dict[group][override]
 				var property : String = override_properties[override]
-				var value = tbt.base_control.callv(method, args)
+				var value = _get_theme_value(method, args)
+				if value == null:
+					continue
 				node.set(property, value)
+
+
+# Returns the first existing theme item from args, or null if none exist.
+# method is one of the get_theme_* methods; the matching has_theme_* method
+# is used to check for existence so missing items do not spam warnings.
+func _get_theme_value(method : String, args : Array) -> Variant:
+	var candidates : Array = args if args[0] is Array else [args]
+	var has_method := method.replace("get_", "has_")
+	for candidate in candidates:
+		if tbt.base_control.callv(has_method, candidate):
+			return tbt.base_control.callv(method, candidate)
+	return null
 
 
 func _setup_custom_heights() -> void:

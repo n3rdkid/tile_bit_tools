@@ -52,7 +52,7 @@ func error(msg : String, p_error : int = G.Errors.NULL_ERROR) -> void:
 	if p_error != G.Errors.NULL_ERROR:
 		msg = ERROR_TEXT_TEMPLATE.format({
 			"error_text": msg,
-			"error": error,
+			"error": p_error,
 		})
 	msg = COLOR_TEMPLATE.format({
 		"color": ERROR_COLOR,
@@ -66,7 +66,7 @@ func warning(msg : String, p_error : int = G.Errors.NULL_ERROR) -> void:
 	if p_error != G.Errors.NULL_ERROR:
 		msg = ERROR_TEXT_TEMPLATE.format({
 			"error_text": msg,
-			"error": error,
+			"error": p_error,
 		})
 	msg = COLOR_TEMPLATE.format({
 		"color": WARNING_COLOR,
@@ -133,9 +133,9 @@ func _is_message_type_enabled(msg_type : MessageTypes) -> bool:
 func _get_error_string(p_error : G.Errors, skip_text_if_null := false) -> String:
 	var error_text : String
 	if skip_text_if_null:
-		error_text = texts.ERROR_TEXTS.get(error, "")
+		error_text = texts.ERROR_TEXTS.get(p_error, "")
 	else:
-		error_text = texts.ERROR_TEXTS.get(error, DEFAULT_ERROR_TEXT)
+		error_text = texts.ERROR_TEXTS.get(p_error, DEFAULT_ERROR_TEXT)
 
 	var error_template : String
 	if error_text == "":
@@ -145,7 +145,7 @@ func _get_error_string(p_error : G.Errors, skip_text_if_null := false) -> String
 
 	var s := error_template.format({
 		"error_text": error_text,
-		"error": error,
+		"error": p_error,
 	})
 
 	var error_color : String
